@@ -8,3 +8,4 @@ Users have the ability to apply regex filters over extracted strings to further 
 It's also possible to write the extraction results to a json file, where srings are categorised by their type.
 
 Installation is easy: run `make` to build the `splinter` binary.
+You can find the Windows builds on the [releases page](https://github.com/pygrum/splinter/releases).
