@@ -59,8 +59,12 @@ func Parse(file, targets, filter string, min, max int, strict, aggressive, saveR
 			if t == "all" {
 				allTargets = options
 				break
+			} else if t == "none" {
+				allTargets = []string{"all"}
+				break
+			} else {
+				return fmt.Errorf("%s is not a valid target", t)
 			}
-			return fmt.Errorf("%s is not a valid target", t)
 		}
 	}
 
@@ -196,10 +200,11 @@ func (f *FileConf) extract() error {
 
 func (f *FileConf) pretty(categories *map[string][]string) {
 	for category, data := range *categories {
-		var maxlen int
-		for _, d := range data {
-			if len(d) > maxlen {
-				maxlen = len(category + ": " + d)
+		var maxlen = len(category)
+		for i := 0; i < len(data); i++ {
+			data[i] = strings.ReplaceAll(data[i], "%", "%%")
+			if len(category+": "+data[i]) > maxlen {
+				maxlen = len(category + ": " + data[i])
 			}
 		}
 		header := " " + strings.Repeat("=", maxlen+2) + " \n"
@@ -209,7 +214,7 @@ func (f *FileConf) pretty(categories *map[string][]string) {
 		var first = true
 		for _, d := range data {
 			d = category + ": " + d
-			row := "| " + strings.ReplaceAll(d, "%", "%%") + strings.Repeat(" ", maxlen-len(d)) + " |\n"
+			row := "| " + d + strings.Repeat(" ", maxlen-len(d)) + " |\n"
 			length = len(row) - 3
 			rchar := "-"
 			if first {

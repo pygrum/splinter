@@ -11,7 +11,7 @@ import (
 var (
 	app         = kingpin.New("splinter", "cli tool for comprehensive analysis of file strings")
 	file        = app.Arg("file", "name of file to analyse - (executable / image)").Required().String()
-	targets     = app.Flag("targets", "string types to extract {url|ipv4|tag|file|registry|all} (comma-separated)").Short('t').Default("all").String()
+	targets     = app.Flag("targets", "string types to extract {url|ipv4|tag|file|registry|none|all} (comma-separated). 'none' extracts any printable characters (like 'strings')").Short('t').Default("all").String()
 	maxLen      = app.Flag("max", "maximum extractable string length").Int()
 	minLen      = app.Flag("min", "minimum extractable string length").Default("3").Int()
 	saveResults = app.Flag("json", "save results as a json file").Bool()
