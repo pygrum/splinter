@@ -214,8 +214,8 @@ func (f *FileConf) pretty(categories *map[string][]string) {
 		var first = true
 		for _, d := range data {
 			d = category + ": " + d
-			row := "| " + d + strings.Repeat(" ", maxlen-len(d)) + " |\n"
-			length = len(row) - 3
+			row := "| " + d + strings.Repeat(" ", maxlen-len(d)+strings.Count(d, "%%")) + " |\n"
+			length = len(row) - 3 - strings.Count(d, "%%")
 			rchar := "-"
 			if first {
 				rchar = "="
