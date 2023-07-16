@@ -17,13 +17,14 @@ var (
 	saveResults = app.Flag("json", "save results as a json file").Bool()
 	filter      = app.Flag("filter", "regex filter for all strings before extraction (like 'grep -v')").String()
 	strict      = app.Flag("strict", "if target is found, only print the target and not the entire string it was found in").Short('s').Default("false").Bool()
+	pretty      = app.Flag("pretty", "pretty print results (in category tables)").Default("false").Bool()
 	agg         = app.Flag("agg", "attempt to find matches for every target in each string (aggressive mode)").Default("false").Bool()
 )
 
 func main() {
 	app.HelpFlag.Short('h')
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-	if err := splinter.Parse(*file, *targets, *filter, *minLen, *maxLen, *strict, *agg, *saveResults); err != nil {
+	if err := splinter.Parse(*file, *targets, *filter, *minLen, *maxLen, *strict, *agg, *saveResults, *pretty); err != nil {
 		log.Fatal(err)
 	}
 }

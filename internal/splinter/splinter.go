@@ -36,11 +36,11 @@ type FileConf struct {
 	targetexp            map[string]*regexp.Regexp
 	regexFilter          *regexp.Regexp
 	switches             struct {
-		saveResults, strict, aggressive bool
+		saveResults, strict, pretty, aggressive bool
 	}
 }
 
-func Parse(file, targets, filter string, min, max int, strict, aggressive, saveResults bool) error {
+func Parse(file, targets, filter string, min, max int, strict, aggressive, saveResults, pretty bool) error {
 	if _, err := os.Stat(file); err != nil {
 		return err
 	}
@@ -80,13 +80,13 @@ func Parse(file, targets, filter string, min, max int, strict, aggressive, saveR
 		// -1 means infinite length
 		max = -1
 	}
-	if err = start(f, allTargets, min, max, r, saveResults, strict, aggressive); err != nil {
+	if err = start(f, allTargets, min, max, r, saveResults, strict, aggressive, pretty); err != nil {
 		return err
 	}
 	return nil
 }
 
-func start(f *os.File, targets []string, min, max int, regex *regexp.Regexp, save, strict, aggressive bool) error {
+func start(f *os.File, targets []string, min, max int, regex *regexp.Regexp, save, strict, aggressive, pretty bool) error {
 	fd := &FileConf{
 		fd:             f,
 		extractTargets: targets,
@@ -96,11 +96,13 @@ func start(f *os.File, targets []string, min, max int, regex *regexp.Regexp, sav
 		switches: struct {
 			saveResults bool
 			strict      bool
+			pretty      bool
 			aggressive  bool
 		}{
 			saveResults: save,
 			strict:      strict,
 			aggressive:  aggressive,
+			pretty:      pretty,
 		},
 	}
 	if err := fd.extract(); err != nil {
@@ -179,6 +181,9 @@ func (f *FileConf) extract() error {
 			return err
 		}
 	}
+	if f.switches.pretty {
+		f.pretty(&categories)
+	}
 	if f.switches.saveResults {
 		n, err := f.save(&categories)
 		if err != nil {
@@ -189,6 +194,35 @@ func (f *FileConf) extract() error {
 	return nil
 }
 
+func (f *FileConf) pretty(categories *map[string][]string) {
+	for category, data := range *categories {
+		var maxlen int
+		for _, d := range data {
+			if len(d) > maxlen {
+				maxlen = len(category + ": " + d)
+			}
+		}
+		header := " " + strings.Repeat("=", maxlen+2) + " \n"
+		title := "| " + category + strings.Repeat(" ", maxlen-len(category)) + " |\n"
+		fmt.Printf(header + title)
+		var length int
+		var first = true
+		for _, d := range data {
+			d = category + ": " + d
+			row := "| " + strings.ReplaceAll(d, "%", "%%") + strings.Repeat(" ", maxlen-len(d)) + " |\n"
+			length = len(row) - 3
+			rchar := "-"
+			if first {
+				rchar = "="
+				first = false
+			}
+			rowhead := " " + strings.Repeat(rchar, length) + " \n"
+			fmt.Printf(rowhead + row)
+		}
+		fmt.Println(" " + strings.Repeat("=", length) + " \n")
+	}
+}
+
 func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 	for _, t := range f.extractTargets {
 		matches := f.targetexp[t].FindAllString(str, -1)
@@ -197,22 +231,32 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 		}
 		if !f.switches.strict {
 			if !f.switches.saveResults {
-				fmt.Println(str)
+				if !f.switches.pretty {
+					fmt.Println(str)
+				}
 			}
 		} else {
 			for _, m := range matches {
 				if len(m) < f.minStrlen || (len(m) > f.maxStrlen && f.maxStrlen != -1) {
 					continue
 				}
-				if !f.switches.saveResults {
-					fmt.Println(m)
+				if !f.switches.saveResults || !f.switches.pretty {
+					if !f.switches.pretty {
+						fmt.Println(m)
+					}
 				}
 			}
 		}
-		if f.switches.saveResults {
-			if f.switches.strict {
-				(*categories)[t] = append((*categories)[t], matches...)
-			} else {
+		if f.switches.saveResults || f.switches.pretty {
+			for _, m := range matches {
+				if len(m) < f.minStrlen || (len(m) > f.maxStrlen && f.maxStrlen != -1) {
+					continue
+				}
+				if f.switches.strict {
+					(*categories)[t] = append((*categories)[t], m)
+				}
+			}
+			if !f.switches.strict {
 				(*categories)[t] = append((*categories)[t], str)
 			}
 		}
@@ -225,7 +269,7 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 
 func (f *FileConf) save(c *map[string][]string) (string, error) {
 	saveFile := f.fd.Name() + ".spl.json"
-	json, err := json.Marshal(*c)
+	json, err := json.MarshalIndent(*c, "", "\t")
 	if err != nil {
 		return "", err
 	}
