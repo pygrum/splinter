@@ -31,7 +31,7 @@ var (
 		"url":      `\bhttps?:\/\/[^"` + "`" + `\s]+`,
 		"ipv4":     `(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3})`,
 		"tag":      `(<.*>.*<.*/?>|</?.*>)`,
-		"file":     `.+?\.(?:%s)`,
+		"file":     `.+?\.(?i)(?:%s)`,
 		"registry": `(?i)(HKLM:|hkey_local_machine)\\(?:[^\\\s]+\\)*[^\\\s]+`,
 		"all":      `.*`,
 	}
@@ -152,7 +152,7 @@ func (f *FileConf) setupFileTargets(targettype string) (map[string]*regexp.Regex
 			return nil, fmt.Errorf("%s: invalid file extension target", t)
 		}
 		f.extractTargets = append(f.extractTargets, t)
-		r, err := regexp.Compile(fmt.Sprintf(targetexp[targettype], strings.Join(Expand(l, expandThreads), "|")))
+		r, err := regexp.Compile(fmt.Sprintf(targetexp[targettype], strings.Join(l, "|")))
 		if err != nil {
 			return nil, err
 		}
