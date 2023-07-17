@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	asciiMin = 0x20
-	asciiMax = 0x7e
+	asciiMin      = 0x20
+	asciiMax      = 0x7e
+	expandThreads = 3
 )
 
 var (
@@ -151,7 +152,7 @@ func (f *FileConf) setupFileTargets(targettype string) (map[string]*regexp.Regex
 			return nil, fmt.Errorf("%s: invalid file extension target", t)
 		}
 		f.extractTargets = append(f.extractTargets, t)
-		r, err := regexp.Compile(fmt.Sprintf(targetexp[targettype], strings.Join(Expand(l, 3), "|")))
+		r, err := regexp.Compile(fmt.Sprintf(targetexp[targettype], strings.Join(Expand(l, expandThreads), "|")))
 		if err != nil {
 			return nil, err
 		}
