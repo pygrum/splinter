@@ -14,11 +14,18 @@ import (
 const (
 	asciiMin = 0x20
 	asciiMax = 0x7e
-	exts
 )
 
 var (
-	options   = []string{"url", "ipv4", "tag", "file", "registry"}
+	taroptions  = []string{"url", "ipv4", "tag", "file", "registry"}
+	extoptions  = []string{"general", "script", "exe", "lib", "macro"}
+	fileoptions = map[string][]string{
+		"general": generalExtensions,
+		"script":  scriptExtensions,
+		"exe":     exeExtensions,
+		"lib":     libExtensions,
+		"macro":   macroExtensions,
+	}
 	targetexp = map[string]string{
 		"url":      `\bhttps?:\/\/[^"` + "`" + `\s]+`,
 		"ipv4":     `(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3})`,
@@ -32,6 +39,7 @@ var (
 type FileConf struct {
 	fd                   *os.File
 	extractTargets       []string
+	fileTargets          []string
 	minStrlen, maxStrlen int
 	targetexp            map[string]*regexp.Regexp
 	regexFilter          *regexp.Regexp
@@ -40,14 +48,8 @@ type FileConf struct {
 	}
 }
 
-func Parse(file, targets, filter string, min, max int, strict, aggressive, saveResults, pretty bool) error {
-	if _, err := os.Stat(file); err != nil {
-		return err
-	}
-
-	allTargets := strings.Split(targets, ",")
-
-	for _, t := range allTargets {
+func validTargets(targets, options []string) (string, bool) {
+	for _, t := range targets {
 		var valid bool
 		for _, o := range options {
 			if t == o {
@@ -56,15 +58,39 @@ func Parse(file, targets, filter string, min, max int, strict, aggressive, saveR
 			}
 		}
 		if !valid {
-			if t == "all" {
-				allTargets = options
-				break
-			} else if t == "none" {
-				allTargets = []string{"all"}
-				break
-			} else {
-				return fmt.Errorf("%s is not a valid target", t)
-			}
+			return t, false
+		}
+	}
+	return "", true
+}
+
+func Parse(file, targets, ftargets, filter string, min, max int, strict, aggressive, saveResults, pretty bool) error {
+	if _, err := os.Stat(file); err != nil {
+		return err
+	}
+
+	allTargets := strings.Split(targets, ",")
+	fileTargets := strings.Split(ftargets, ",")
+
+	tg, valid := validTargets(allTargets, taroptions)
+
+	if !valid {
+		if tg == "all" {
+			allTargets = taroptions
+		} else if tg == "none" {
+			allTargets = []string{"all"}
+		} else {
+			return fmt.Errorf("%s is not a valid target", tg)
+		}
+	}
+
+	tg, valid = validTargets(fileTargets, extoptions)
+
+	if !valid {
+		if tg == "all" {
+			fileTargets = extoptions
+		} else {
+			return fmt.Errorf("%s is not a valid file type", tg)
 		}
 	}
 
@@ -84,16 +110,17 @@ func Parse(file, targets, filter string, min, max int, strict, aggressive, saveR
 		// -1 means infinite length
 		max = -1
 	}
-	if err = start(f, allTargets, min, max, r, saveResults, strict, aggressive, pretty); err != nil {
+	if err = start(f, allTargets, fileTargets, min, max, r, saveResults, strict, aggressive, pretty); err != nil {
 		return err
 	}
 	return nil
 }
 
-func start(f *os.File, targets []string, min, max int, regex *regexp.Regexp, save, strict, aggressive, pretty bool) error {
+func start(f *os.File, targets, fileTargets []string, min, max int, regex *regexp.Regexp, save, strict, aggressive, pretty bool) error {
 	fd := &FileConf{
 		fd:             f,
 		extractTargets: targets,
+		fileTargets:    fileTargets,
 		minStrlen:      min,
 		maxStrlen:      max,
 		regexFilter:    regex,
@@ -115,10 +142,32 @@ func start(f *os.File, targets []string, min, max int, regex *regexp.Regexp, sav
 	return nil
 }
 
+// returns map of targets and their regexes of different file types, or error
+func (f *FileConf) setupFileTargets(targettype string) (map[string]*regexp.Regexp, error) {
+	m := make(map[string]*regexp.Regexp)
+	for _, t := range f.fileTargets {
+		l, ok := fileoptions[t]
+		if !ok {
+			return nil, fmt.Errorf("%s: invalid file extension target", t)
+		}
+		f.extractTargets = append(f.extractTargets, t)
+		r, err := regexp.Compile(fmt.Sprintf(targetexp[targettype], strings.Join(Expand(l, 3), "|")))
+		if err != nil {
+			return nil, err
+		}
+		m[t] = r
+	}
+	return m, nil
+}
+
 func (f *FileConf) initRegexp(targets map[string]string) error {
 	ctargetexp := make(map[string]*regexp.Regexp)
-	for s, regexPattern := range targetexp {
+	// extra file targets just in case
+	filetargetexp := make(map[string]*regexp.Regexp)
+
+	for s, regexPattern := range targets {
 		var included = false
+		// check if specified target is valid
 		for _, t := range f.extractTargets {
 			if s == t {
 				included = true
@@ -128,8 +177,22 @@ func (f *FileConf) initRegexp(targets map[string]string) error {
 		if !included {
 			continue
 		}
+		// if
 		if s == "file" {
-			regexPattern = fmt.Sprintf(regexPattern, strings.Join(extensions, "|"))
+			m, err := f.setupFileTargets(s)
+			if err != nil {
+				return fmt.Errorf("unable to setup file targets: %v", err)
+			}
+			filetargetexp = m
+			var index int
+			for i, e := range f.extractTargets {
+				if e == "file" {
+					index = i
+					break
+				}
+			}
+			f.extractTargets = append(f.extractTargets[:index], f.extractTargets[index+1:]...)
+			continue
 		}
 		r, err := regexp.Compile(regexPattern)
 		if err != nil {
@@ -138,6 +201,9 @@ func (f *FileConf) initRegexp(targets map[string]string) error {
 		ctargetexp[s] = r
 	}
 	f.targetexp = ctargetexp
+	for k, v := range filetargetexp {
+		f.targetexp[k] = v
+	}
 	return nil
 }
 
@@ -193,7 +259,7 @@ func (f *FileConf) extract() error {
 		if err != nil {
 			return fmt.Errorf("could not save %s: %v", n, err)
 		}
-		fmt.Printf("saved results as %s\n", n)
+		fmt.Printf("saved results to %s\n", n)
 	}
 	return nil
 }
@@ -235,20 +301,16 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 			continue
 		}
 		if !f.switches.strict {
-			if !f.switches.saveResults {
-				if !f.switches.pretty {
-					fmt.Println(str)
-				}
+			if !f.switches.saveResults && !f.switches.pretty {
+				fmt.Println(str)
 			}
 		} else {
 			for _, m := range matches {
 				if len(m) < f.minStrlen || (len(m) > f.maxStrlen && f.maxStrlen != -1) {
 					continue
 				}
-				if !f.switches.saveResults || !f.switches.pretty {
-					if !f.switches.pretty {
-						fmt.Println(m)
-					}
+				if !f.switches.saveResults && !f.switches.pretty {
+					fmt.Println(m)
 				}
 			}
 		}
@@ -278,5 +340,6 @@ func (f *FileConf) save(c *map[string][]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	fmt.Println(string(json))
 	return saveFile, os.WriteFile(saveFile, json, 0600)
 }
