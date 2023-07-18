@@ -26,7 +26,7 @@ Flags:
       --max=MAX          maximum extractable string length
       --min=3            minimum extractable string length
       --json             save results as a json file
-      --filter=FILTER    regex filter for all strings before extraction (like 'grep -v')
+      --filter=FILTER    regex filter for all strings before extraction (like 'grep')
   -s, --strict           if target is found, only print the target and not the entire string it was found in
       --pretty           pretty print results (in category tables)
       --agg              attempt to find matches for every target in each string (aggressive mode)
