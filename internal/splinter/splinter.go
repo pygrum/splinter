@@ -18,8 +18,6 @@ const (
 )
 
 var (
-	taroptions  = []string{"url", "ipv4", "tag", "file", "registry"}
-	extoptions  = []string{"general", "script", "exe", "lib", "macro"}
 	fileoptions = map[string][]string{
 		"general": generalExtensions,
 		"script":  scriptExtensions,
@@ -65,31 +63,49 @@ func validTargets(targets, options []string) (string, bool) {
 	return "", true
 }
 
+func getExtOptions(ops map[string][]string) []string {
+	var eops []string
+	for k := range ops {
+		eops = append(eops, k)
+	}
+	return eops
+}
+
+func getTarOptions(ops map[string]string) []string {
+	var eops []string
+	for k := range ops {
+		if k != "all" {
+			eops = append(eops, k)
+		}
+	}
+	return eops
+}
+
 func Parse(file, targets, ftargets, filter string, min, max int, strict, aggressive, saveResults, pretty bool) error {
 	if _, err := os.Stat(file); err != nil {
 		return err
 	}
-
+	tOptions := getTarOptions(targetexp)
 	allTargets := strings.Split(targets, ",")
 	fileTargets := strings.Split(ftargets, ",")
 
-	tg, valid := validTargets(allTargets, taroptions)
+	tg, valid := validTargets(allTargets, tOptions)
 
 	if !valid {
 		if tg == "all" {
-			allTargets = taroptions
+			allTargets = tOptions
 		} else if tg == "none" {
 			allTargets = []string{"all"}
 		} else {
 			return fmt.Errorf("%s is not a valid target", tg)
 		}
 	}
-
-	tg, valid = validTargets(fileTargets, extoptions)
+	eOptions := getExtOptions(fileoptions)
+	tg, valid = validTargets(fileTargets, eOptions)
 
 	if !valid {
 		if tg == "all" {
-			fileTargets = extoptions
+			fileTargets = eOptions
 		} else {
 			return fmt.Errorf("%s is not a valid file type", tg)
 		}
