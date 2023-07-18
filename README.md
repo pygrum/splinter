@@ -6,7 +6,7 @@
 `splinter` aids with basic static analysis, with the ability to:
 - quickly extract specific string types from a binary - URLs, IPs, registry keys, files, filetypes, and more
 - apply global regex filters over extracted strings to further narrow down the output for desired results
-- export the extraction results to a json file, where strings are categorised by their type
+- export the extraction results to a json file, where strings are categorized by their type
 - pretty print the results in neat, fitted tables
 
 Installation is easy: run `make` to build the `splinter` binary.
@@ -32,7 +32,7 @@ Flags:
       --agg              attempt to find matches for every target in each string (aggressive mode)
 
 Args:
-  <file>  name of file to analyse - (executable / image)
+  <file>  name of file to analyze - (executable / image)
 ```
 | Option | Description |
 | --- | ------------- |
@@ -41,7 +41,7 @@ Args:
 | `registry` | Matches any paths that begin with HKLM:\ or HKEY_LOCAL_MACHINE. |
 | `file` | Matches any string that contains a valid (case insensitive) file extension. The 'file type descriptions' heading describes specific filetypes that users can search for. |
 | `none` | `splinter` will act as the default `strings` utility. |
-| `all` | Extract all of the special targets above. |
+| `all` | Extract all of the special targets above. | 
 
 #### File type descriptions
 
