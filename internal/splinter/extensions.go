@@ -1,7 +1,7 @@
 package splinter
 
 var (
-	generalExtensions = []string{
+	commonExtensions = []string{
 		"txt",
 		"docx",
 		"pdf",
@@ -26,10 +26,12 @@ var (
 		"vbs",
 		"swift",
 		"sh",
+		"ps1",
 	}
 	libExtensions = []string{
 		"dll",
 		"so",
+		"dylib",
 	}
 	exeExtensions = []string{
 		"apk",
@@ -48,6 +50,7 @@ var (
 		"wsh",
 		"hta",
 		"jar",
+		"bundle",
 	}
 	macroExtensions = []string{
 		"docm",

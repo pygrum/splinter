@@ -19,11 +19,11 @@ const (
 
 var (
 	fileoptions = map[string][]string{
-		"general": generalExtensions,
-		"script":  scriptExtensions,
-		"exe":     exeExtensions,
-		"lib":     libExtensions,
-		"macro":   macroExtensions,
+		"common": commonExtensions,
+		"script": scriptExtensions,
+		"exe":    exeExtensions,
+		"lib":    libExtensions,
+		"macro":  macroExtensions,
 	}
 	targetexp = map[string]string{
 		"url":      `\bhttps?:\/\/[^"` + "`" + `\s]+`,
