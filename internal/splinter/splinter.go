@@ -18,10 +18,8 @@ import (
 )
 
 const (
-	prMin = 0x20
-	prMax = 0x7e
-	LE    = 10
-	BE    = 20
+	LE = 10
+	BE = 20
 )
 
 var (
