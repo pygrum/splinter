@@ -47,13 +47,11 @@ var (
 	targetexp = map[string]string{
 		"url":      `\bhttps?:\/\/[^"` + "`" + `\s]+`,
 		"ipv4":     `(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3})`,
-		"file":     `[^ |\n|\r]+?\.(?i)(?:%s)(\s|$)`,
+		"file":     `[^\n|\r]+?\.(?i)(?:%s)(\s|$)`,
 		"path":     `(?:[a-zA-Z]\:|\\\\[^\\\/\:\*\?\<\>\|]+\\[^\\\/\:\*\?\<\>\|]*)\\(?:[^\\\/\:\*\?\<\>\|]+\\)*\w([^\\\/\:\*\?\<\>\|])*`,
 		"registry": `(?i)(HKLM:|hkey_local_machine|software)\\(?:[^\\\s]+\\)*[^\\\s]+`,
 		"email":    `[a-zA-Z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}`,
 		"wallet":   `[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,
-		"hex":      `([A-F0-9]|[a-f0-9]){32}|([A-F0-9]|[a-f0-9]){48}|([A-F0-9]|[a-f0-9]){64}`,
-		"all":      `.*`,
 	}
 	targetshort = map[string]string{
 		"u": "url",
@@ -64,7 +62,6 @@ var (
 		"e": "email",
 		"w": "wallet",
 		"h": "hex",
-		"a": "all",
 	}
 )
 
@@ -114,9 +111,7 @@ func getExtOptions(ops map[string][]string) []string {
 func getTarOptions(ops map[string]string) []string {
 	var eops []string
 	for k := range ops {
-		if k != "all" {
-			eops = append(eops, k)
-		}
+		eops = append(eops, k)
 	}
 	return eops
 }
@@ -132,7 +127,7 @@ func Parse(file, targets, ftargets, filter string, min, max int, encoding string
 	tg, valid := validTargets(allTargets, tOptions, targetshort)
 
 	if !valid {
-		if tg == "all" {
+		if tg == "all" || tg == "a" {
 			allTargets = tOptions
 		} else if tg == "none" || tg == "n" {
 			allTargets = []string{"all"}
@@ -390,7 +385,13 @@ func (f *FileConf) pretty(categories *map[string][]string) {
 
 func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 	for _, t := range f.extractTargets {
-		matches := f.targetexp[t].FindAllString(str, -1)
+		var matches []string
+		// don't use regex for 'all' to save time
+		if t == "all" {
+			matches = []string{str}
+		} else {
+			matches = f.targetexp[t].FindAllString(str, -1)
+		}
 		if len(matches) == 0 {
 			continue
 		}
