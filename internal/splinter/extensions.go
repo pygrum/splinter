@@ -18,6 +18,9 @@ var (
 		"pptx",
 		"css",
 		"html",
+		"rar",
+		"zip",
+		"tmp",
 	}
 	scriptExtensions = []string{
 		"py",
@@ -30,23 +33,18 @@ var (
 	}
 	libExtensions = []string{
 		"dll",
-		"so",
+		`so(\.+[0-9])?`,
 		"dylib",
 	}
 	exeExtensions = []string{
 		"apk",
 		"exe",
-		"com",
 		"wsf",
 		"bin",
 		"bat",
 		"run",
 		"cmd",
-		"inf",
-		"ipa",
 		"osx",
-		"pif",
-		"run",
 		"wsh",
 		"hta",
 		"jar",

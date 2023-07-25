@@ -9,15 +9,27 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding"
+	uni "golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 const (
-	asciiMin      = 0x20
-	asciiMax      = 0x7e
-	expandThreads = 3
+	prMin = 0x20
+	prMax = 0x7e
+	LE    = 10
+	BE    = 20
 )
 
 var (
+	encodings = map[string]int{
+		"s": 1,
+		"b": 2,
+		"l": 3,
+	}
 	fileoptions = map[string][]string{
 		"common": commonExtensions,
 		"script": scriptExtensions,
@@ -25,30 +37,53 @@ var (
 		"lib":    libExtensions,
 		"macro":  macroExtensions,
 	}
+	fileshort = map[string]string{
+		"c": "common",
+		"s": "script",
+		"e": "exe",
+		"l": "lib",
+		"m": "macro",
+	}
 	targetexp = map[string]string{
 		"url":      `\bhttps?:\/\/[^"` + "`" + `\s]+`,
 		"ipv4":     `(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3})`,
-		"tag":      `(<.*>.*<.*/?>|</?.*>)`,
-		"file":     `.+?\.(?i)(?:%s)`,
-		"registry": `(?i)(HKLM:|hkey_local_machine)\\(?:[^\\\s]+\\)*[^\\\s]+`,
+		"file":     `[^ |\n|\r]+?\.(?i)(?:%s)(\s|$)`,
+		"path":     `(?:[a-zA-Z]\:|\\\\[^\\\/\:\*\?\<\>\|]+\\[^\\\/\:\*\?\<\>\|]*)\\(?:[^\\\/\:\*\?\<\>\|]+\\)*\w([^\\\/\:\*\?\<\>\|])*`,
+		"registry": `(?i)(HKLM:|hkey_local_machine|software)\\(?:[^\\\s]+\\)*[^\\\s]+`,
+		"email":    `[a-zA-Z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}`,
+		"wallet":   `[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,
+		"hex":      `([A-F0-9]|[a-f0-9]){32}|([A-F0-9]|[a-f0-9]){48}|([A-F0-9]|[a-f0-9]){64}`,
 		"all":      `.*`,
+	}
+	targetshort = map[string]string{
+		"u": "url",
+		"4": "ipv4",
+		"f": "file",
+		"r": "registry",
+		"p": "path",
+		"e": "email",
+		"w": "wallet",
+		"h": "hex",
+		"a": "all",
 	}
 )
 
 type FileConf struct {
 	fd                   *os.File
+	readOffset           int
+	endianness           int
 	extractTargets       []string
 	fileTargets          []string
 	minStrlen, maxStrlen int
 	targetexp            map[string]*regexp.Regexp
 	regexFilter          *regexp.Regexp
 	switches             struct {
-		saveResults, strict, pretty, aggressive bool
+		jsonResults, strict, pretty, aggressive bool
 	}
 }
 
-func validTargets(targets, options []string) (string, bool) {
-	for _, t := range targets {
+func validTargets(targets, options []string, shortoptions map[string]string) (string, bool) {
+	for i, t := range targets {
 		var valid bool
 		for _, o := range options {
 			if t == o {
@@ -57,6 +92,11 @@ func validTargets(targets, options []string) (string, bool) {
 			}
 		}
 		if !valid {
+			v, ok := shortoptions[t]
+			if ok {
+				targets[i] = v
+				continue
+			}
 			return t, false
 		}
 	}
@@ -81,7 +121,7 @@ func getTarOptions(ops map[string]string) []string {
 	return eops
 }
 
-func Parse(file, targets, ftargets, filter string, min, max int, strict, aggressive, saveResults, pretty bool) error {
+func Parse(file, targets, ftargets, filter string, min, max int, encoding string, strict, aggressive, jsonResults, pretty bool) error {
 	if _, err := os.Stat(file); err != nil {
 		return err
 	}
@@ -89,19 +129,19 @@ func Parse(file, targets, ftargets, filter string, min, max int, strict, aggress
 	allTargets := strings.Split(targets, ",")
 	fileTargets := strings.Split(ftargets, ",")
 
-	tg, valid := validTargets(allTargets, tOptions)
+	tg, valid := validTargets(allTargets, tOptions, targetshort)
 
 	if !valid {
 		if tg == "all" {
 			allTargets = tOptions
-		} else if tg == "none" {
+		} else if tg == "none" || tg == "n" {
 			allTargets = []string{"all"}
 		} else {
 			return fmt.Errorf("%s is not a valid target", tg)
 		}
 	}
 	eOptions := getExtOptions(fileoptions)
-	tg, valid = validTargets(fileTargets, eOptions)
+	tg, valid = validTargets(fileTargets, eOptions, fileshort)
 
 	if !valid {
 		if tg == "all" {
@@ -122,19 +162,32 @@ func Parse(file, targets, ftargets, filter string, min, max int, strict, aggress
 			return fmt.Errorf("failed to compile regex filter: %v", err)
 		}
 	}
-
+	h, ok := encodings[encoding]
+	if !ok {
+		return fmt.Errorf("invalid encoding specified - should be s (UTF8), l (UTF16LE) or b (UTF16BE)")
+	}
+	var endianness int
+	if h == 3 {
+		endianness = LE
+	} else if h == 2 {
+		endianness = BE
+	} else {
+		endianness = -1
+	}
 	if max == 0 {
 		// -1 means infinite length
 		max = -1
 	}
-	if err = start(f, allTargets, fileTargets, min, max, r, saveResults, strict, aggressive, pretty); err != nil {
+	if err = start(f, allTargets, fileTargets, min, max, h, endianness, r, jsonResults, strict, aggressive, pretty); err != nil {
 		return err
 	}
 	return nil
 }
 
-func start(f *os.File, targets, fileTargets []string, min, max int, regex *regexp.Regexp, save, strict, aggressive, pretty bool) error {
+func start(f *os.File, targets, fileTargets []string, min, max, readOffset, endianness int, regex *regexp.Regexp, jsonResults, strict, aggressive, pretty bool) error {
 	fd := &FileConf{
+		readOffset:     readOffset,
+		endianness:     endianness,
 		fd:             f,
 		extractTargets: targets,
 		fileTargets:    fileTargets,
@@ -142,12 +195,12 @@ func start(f *os.File, targets, fileTargets []string, min, max int, regex *regex
 		maxStrlen:      max,
 		regexFilter:    regex,
 		switches: struct {
-			saveResults bool
+			jsonResults bool
 			strict      bool
 			pretty      bool
 			aggressive  bool
 		}{
-			saveResults: save,
+			jsonResults: jsonResults,
 			strict:      strict,
 			aggressive:  aggressive,
 			pretty:      pretty,
@@ -194,7 +247,6 @@ func (f *FileConf) initRegexp(targets map[string]string) error {
 		if !included {
 			continue
 		}
-		// if
 		if s == "file" {
 			m, err := f.setupFileTargets(s)
 			if err != nil {
@@ -223,10 +275,35 @@ func (f *FileConf) initRegexp(targets map[string]string) error {
 	}
 	return nil
 }
+func newUTF16Reader(file *os.File, endianness int) (*transform.Reader, error) {
+	var win16enc encoding.Encoding
+	if endianness == BE {
+		win16enc = uni.UTF16(uni.BigEndian, uni.IgnoreBOM)
+	} else {
+		win16enc = uni.UTF16(uni.LittleEndian, uni.IgnoreBOM)
+	}
+	utf16bom := uni.BOMOverride(win16enc.NewDecoder())
+
+	unicodeReader := transform.NewReader(file, utf16bom)
+	return unicodeReader, nil
+}
+
+func (f *FileConf) validData(b byte) bool {
+	return utf8.Valid([]byte{b}) && unicode.IsPrint(rune(b))
+}
 
 func (f *FileConf) extract() error {
 	categories := make(map[string][]string)
-	reader := bufio.NewReader(f.fd)
+	var reader *bufio.Reader
+	if f.endianness != -1 {
+		r, err := newUTF16Reader(f.fd, f.endianness)
+		if err != nil {
+			return err
+		}
+		reader = bufio.NewReader(r)
+	} else {
+		reader = bufio.NewReader(f.fd)
+	}
 	if err := f.initRegexp(targetexp); err != nil {
 		return err
 	}
@@ -236,47 +313,47 @@ func (f *FileConf) extract() error {
 		for {
 			b, err := reader.ReadByte()
 			if err != nil {
-				if errors.Is(err, io.EOF) {
+				if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 					fend = true
 					break
 				}
 				return err
 			}
-			if b < asciiMin || b > asciiMax {
+			if !f.validData(b) {
 				if reading {
 					reading = false
 					break
 				}
 				continue
+			} else {
+				strBytes = append(strBytes, b)
 			}
 			reading = true
-			strBytes = append(strBytes, b)
 		}
 		if fend {
 			break
 		}
-		if len(strBytes) < f.minStrlen || (len(strBytes) > f.maxStrlen && f.maxStrlen != -1) {
+		strData := string(strBytes)
+		if len(strData) < f.minStrlen || (len(strData) > f.maxStrlen && f.maxStrlen != -1) {
 			continue
 		}
 		// filter out if matches with regex filter
 		if f.regexFilter != nil {
-			if validstr := f.regexFilter.MatchString(string(strBytes)); !validstr {
+			if validstr := f.regexFilter.MatchString(strData); !validstr {
 				continue
 			}
 		}
-		if err := f.analyse(string(strBytes), &categories); err != nil {
+		if err := f.analyse(strData, &categories); err != nil {
 			return err
 		}
 	}
 	if f.switches.pretty {
 		f.pretty(&categories)
 	}
-	if f.switches.saveResults {
-		n, err := f.save(&categories)
-		if err != nil {
-			return fmt.Errorf("could not save %s: %v", n, err)
+	if f.switches.jsonResults {
+		if err := f.json(&categories); err != nil {
+			return fmt.Errorf("could not print json: %v", err)
 		}
-		fmt.Printf("saved results to %s\n", n)
 	}
 	return nil
 }
@@ -317,8 +394,11 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 		if len(matches) == 0 {
 			continue
 		}
-		if !f.switches.strict {
-			if !f.switches.saveResults && !f.switches.pretty {
+		for i := range matches {
+			matches[i] = strings.TrimSpace(matches[i])
+		}
+		if f.switches.strict {
+			if !f.switches.jsonResults && !f.switches.pretty {
 				fmt.Println(str)
 			}
 		} else {
@@ -326,21 +406,21 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 				if len(m) < f.minStrlen || (len(m) > f.maxStrlen && f.maxStrlen != -1) {
 					continue
 				}
-				if !f.switches.saveResults && !f.switches.pretty {
+				if !f.switches.jsonResults && !f.switches.pretty {
 					fmt.Println(m)
 				}
 			}
 		}
-		if f.switches.saveResults || f.switches.pretty {
+		if f.switches.jsonResults || f.switches.pretty {
 			for _, m := range matches {
 				if len(m) < f.minStrlen || (len(m) > f.maxStrlen && f.maxStrlen != -1) {
 					continue
 				}
-				if f.switches.strict {
+				if !f.switches.strict {
 					(*categories)[t] = append((*categories)[t], m)
 				}
 			}
-			if !f.switches.strict {
+			if f.switches.strict {
 				(*categories)[t] = append((*categories)[t], str)
 			}
 		}
@@ -351,12 +431,11 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 	return nil
 }
 
-func (f *FileConf) save(c *map[string][]string) (string, error) {
-	saveFile := f.fd.Name() + ".spl.json"
+func (f *FileConf) json(c *map[string][]string) error {
 	json, err := json.MarshalIndent(*c, "", "\t")
 	if err != nil {
-		return "", err
+		return err
 	}
 	fmt.Println(string(json))
-	return saveFile, os.WriteFile(saveFile, json, 0600)
+	return nil
 }
