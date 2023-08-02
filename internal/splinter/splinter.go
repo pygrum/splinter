@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -47,7 +48,7 @@ var (
 		"ipv4":     `(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3})`,
 		"file":     `[^\n|\r]+?\.(?i)(?:%s)(\s|$)`,
 		"path":     `(?:[a-zA-Z]\:|\\\\[^\\\/\:\*\?\<\>\|]+\\[^\\\/\:\*\?\<\>\|]*)\\(?:[^\\\/\:\*\?\<\>\|]+\\)*\w([^\\\/\:\*\?\<\>\|])*`,
-		"registry": `(?i)(HKLM:|hkey_local_machine|hkcu:|software)\\(?:[^\\\s]+\\)*[^\\\s]+`,
+		"registry": `(?i)(HKLM:|hkey_local_machine|hkcu:|software)\\(?:[^\\\s]+\\)*[^\\]+$`,
 		"email":    `[a-zA-Z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}`,
 		"wallet":   `[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,
 	}
@@ -59,7 +60,6 @@ var (
 		"p": "path",
 		"e": "email",
 		"w": "wallet",
-		"h": "hex",
 	}
 )
 
@@ -75,6 +75,11 @@ type FileConf struct {
 	switches             struct {
 		jsonResults, strict, pretty, aggressive bool
 	}
+}
+
+type categoriesData struct {
+	categoriesMap map[string][]string
+	mu            sync.Mutex
 }
 
 func validTargets(targets, options []string, shortoptions map[string]string) (string, bool) {
@@ -286,7 +291,10 @@ func (f *FileConf) validData(b byte) bool {
 }
 
 func (f *FileConf) extract() error {
-	categories := make(map[string][]string)
+	categories := categoriesData{
+		categoriesMap: make(map[string][]string),
+		mu:            sync.Mutex{},
+	}
 	var reader *bufio.Reader
 	if f.endianness != -1 {
 		r, err := newUTF16Reader(f.fd, f.endianness)
@@ -300,6 +308,7 @@ func (f *FileConf) extract() error {
 	if err := f.initRegexp(targetexp); err != nil {
 		return err
 	}
+	var wg sync.WaitGroup
 	for {
 		var strBytes []byte
 		var fend, reading bool
@@ -336,10 +345,13 @@ func (f *FileConf) extract() error {
 				continue
 			}
 		}
-		if err := f.analyse(strData, &categories); err != nil {
-			return err
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f.analyse(strData, &categories)
+		}()
 	}
+	wg.Wait()
 	if f.switches.pretty {
 		f.pretty(&categories)
 	}
@@ -351,8 +363,8 @@ func (f *FileConf) extract() error {
 	return nil
 }
 
-func (f *FileConf) pretty(categories *map[string][]string) {
-	for category, data := range *categories {
+func (f *FileConf) pretty(categories *categoriesData) {
+	for category, data := range categories.categoriesMap {
 		var maxlen = len(category)
 		for i := 0; i < len(data); i++ {
 			data[i] = strings.ReplaceAll(data[i], "%", "%%")
@@ -381,7 +393,7 @@ func (f *FileConf) pretty(categories *map[string][]string) {
 	}
 }
 
-func (f *FileConf) analyse(str string, categories *map[string][]string) error {
+func (f *FileConf) analyse(str string, categories *categoriesData) {
 	for _, t := range f.extractTargets {
 		var matches []string
 		// don't use regex for 'all' to save time
@@ -416,22 +428,25 @@ func (f *FileConf) analyse(str string, categories *map[string][]string) error {
 					continue
 				}
 				if !f.switches.strict {
-					(*categories)[t] = append((*categories)[t], m)
+					categories.mu.Lock()
+					(categories.categoriesMap)[t] = append((categories.categoriesMap)[t], m)
+					categories.mu.Unlock()
 				}
 			}
 			if f.switches.strict {
-				(*categories)[t] = append((*categories)[t], str)
+				categories.mu.Lock()
+				(categories.categoriesMap)[t] = append((categories.categoriesMap)[t], str)
+				categories.mu.Unlock()
 			}
 		}
 		if !f.switches.aggressive {
 			break
 		}
 	}
-	return nil
 }
 
-func (f *FileConf) json(c *map[string][]string) error {
-	json, err := json.MarshalIndent(*c, "", "\t")
+func (f *FileConf) json(c *categoriesData) error {
+	json, err := json.MarshalIndent(c.categoriesMap, "", "\t")
 	if err != nil {
 		return err
 	}
