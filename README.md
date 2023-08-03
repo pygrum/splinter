@@ -40,7 +40,7 @@ Args:
 | `url` | Extract embedded URLs. This works by matching strings that contain `http(s)://` and no other invalid characters. As of v0.1.3, there's no support for other directives such as `ssh` or `ftp`. |
 | `ipv4` | Extract ipv4 addresses. Any valid ({0-255}.{0-255}.{0-255}.{0-255}) IPv4 addresses are matched. As of v0.1.3, there's no support for IPv6 addresses. |
 | `registry` | Matches any paths that begin with HKLM, HKCU, Software or HKEY_LOCAL_MACHINE. |
-| `key` | Extract RSA public and private keys from binaries (useful for classifying ransomware). |
+| `key` | Extract RSA/X.509 public and private keys from binaries (useful for classifying ransomware). |
 | `path` | Extract windows paths - typically a single ascii letter + :\ + text |
 | `file` | Matches any string that contains a valid (case insensitive) file extension. The 'file type descriptions' heading describes specific filetypes that users can search for. |
 | `email` | Matches valid email addresses. |
