@@ -50,8 +50,7 @@ var (
 		"path":     `(?:[a-zA-Z]\:|\\\\[^\\\/\:\*\?\<\>\|]+\\[^\\\/\:\*\?\<\>\|]*)\\(?:[^\\\/\:\*\?\<\>\|]+\\)*\w([^\\\/\:\*\?\<\>\|])*`,
 		"registry": `(?i)(HKLM:|hkey_local_machine|hkcu:|software)\\(?:[^\\\s]+\\)*[^\\]+$`,
 		"email":    `[a-zA-Z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}`,
-		//"wallet":   `[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,
-		"key": `(-----BEGIN PUBLIC KEY-----(\n|\r|\r\n)?([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n)?)*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n)?)?-----END PUBLIC KEY-----)|(-----BEGIN RSA PRIVATE KEY-----(\n|\r|\r\n)?([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n)?)*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n)?)?-----END RSA PRIVATE KEY-----)`,
+		"key":      `(-----BEGIN( RSA)? PUBLIC KEY-----(\n|\r|\r\n)?([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n)?)*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n)?)?-----END( RSA)? PUBLIC KEY-----)|(-----BEGIN RSA PRIVATE KEY-----(\n|\r|\r\n)?([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n)?)*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n)?)?-----END RSA PRIVATE KEY-----)`,
 	}
 	targetshort = map[string]string{
 		"u": "url",
@@ -60,7 +59,6 @@ var (
 		"r": "registry",
 		"p": "path",
 		"e": "email",
-		//"w": "wallet",
 		"k": "key",
 	}
 )
